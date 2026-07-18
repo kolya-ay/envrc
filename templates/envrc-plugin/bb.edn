@@ -1,0 +1,3 @@
+{:paths ["envrc" "test"]
+ :tasks {test {:doc "Run plugin tests"
+               :task (shell "bb -cp envrc:test -m test.runner")}}}

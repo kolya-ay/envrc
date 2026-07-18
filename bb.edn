@@ -1,0 +1,21 @@
+{:paths ["src" "test"]
+ :tasks
+ {:requires ([babashka.process :refer [shell]]
+             [clojure.string :as str])
+  :init (def bb-cp
+          (str/trim
+           (:out
+            (shell {:out :string}
+                   "nix" "eval" "--raw" "--impure" "--expr"
+                   "let pkgs = import (builtins.getFlake \"github:NixOS/nixpkgs/nixos-26.05\").outPath { system = builtins.currentSystem; }; in (import ./nix/bb-deps.nix { inherit (pkgs) fetchMavenArtifact; }).classpath"))))
+
+  test (shell "bb" "-cp" (str bb-cp ":src:test:plugins/default") "-m" "runner")
+
+  cli (apply shell "bb" "-cp" (str bb-cp ":src:plugins/default") "-m" "envrc" "--" *command-line-args*)
+
+  nrepl (shell "bb" "-cp" (str bb-cp ":src:test:plugins/default") "nrepl-server")
+
+  nix-build (shell "nix" "build" ".#envrc")
+
+  check (do (run 'test)
+            (shell "nix" "flake" "check"))}}
