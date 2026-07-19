@@ -94,13 +94,13 @@
                 :extra-env {"PC_SOCKET_PATH" sock-path}}]
       (apply p/shell opts args))))
 
-(defn- wrap-for-restart [body restart]
+(defn wrap-for-restart [body restart]
   (case restart
     "always"     (str "while true; do " body "; sleep 1; done")
     "on_failure" (str "until " body "; do sleep 1; done")
     body))
 
-(defn- topo-order
+(defn topo-order
   "Kahn's algorithm over :process-compose.depends-on graph. Throws on cycle."
   [services]
   (let [deps (into {} (map (fn [[k v]]
@@ -119,7 +119,7 @@
                             (remove (set ready) remaining))))))]
     (vec (step [] (sort-by name all)))))
 
-(defn- poll-readiness! [{:keys [readiness-probe]}]
+(defn poll-readiness! [{:keys [readiness-probe]}]
   (when-let [exec-cmd (get-in readiness-probe [:exec :command])]
     (let [deadline (+ (System/currentTimeMillis)
                       (* 1000 (or (:timeout-sec readiness-probe) 60)))

@@ -143,19 +143,51 @@
               (println "no such worktree:" name))
             (System/exit 1))))))
 
-(defn- rm [_cfg {:keys [args]}]
-  (let [arg (first args)]
+(defn- flag? [args k] (some #{k} args))
+
+(defn- owning-repo
+  "Main worktree root that owns the given worktree path, or nil."
+  [path]
+  (let [{:keys [exit out]} (p/shell {:out :string :err :string :continue true
+                                     :dir path}
+                                    "git" "rev-parse" "--path-format=absolute"
+                                    "--git-common-dir")]
+    (when (zero? exit)
+      (-> (str/trim out) (str/replace #"/\.git/?$" "")))))
+
+(defn- branch-at
+  "Branch checked out at the worktree path, or nil (detached)."
+  [path]
+  (let [{:keys [exit out]} (p/shell {:out :string :err :string :continue true
+                                     :dir path}
+                                    "git" "symbolic-ref" "--quiet" "--short" "HEAD")]
+    (when (zero? exit) (str/trim out))))
+
+(defn rm [_cfg {:keys [args]}]
+  (let [force (boolean (or (flag? args "--force") (flag? args "-D")))
+        arg   (first (remove #{"--force" "-D"} args))]
     (when-not arg
       (throw (ex-info "envrc ws rm <name-or-path>: requires arg" {})))
-    (let [path (if (str/starts-with? arg "/")
+    (let [tl   (git-toplevel)
+          path (if (str/starts-with? arg "/")
                  arg
-                 (when-let [tl (git-toplevel)]
-                   (worktree-dest tl arg)))]
+                 (when tl (worktree-dest tl arg)))]
       (when-not path
         (throw (ex-info "envrc ws rm: not inside a git project and no absolute path given" {})))
-      (p/shell {:continue true} "direnv" "revoke" path)
-      (p/shell {:continue true} "git" "worktree" "remove" path)
-      (e/fire! :workspace-removed {:dst path}))))
+      (let [repo   (or (owning-repo path) tl)
+            branch (branch-at path)]
+        (p/shell {:continue true} "direnv" "revoke" path)
+        (when repo
+          (apply p/shell {:continue true :dir repo} "git" "worktree" "remove"
+                 (concat (when force ["--force"]) ["--" path])))
+        (when (and repo branch)
+          (let [{:keys [exit err]} (p/shell {:out :string :err :string :continue true :dir repo}
+                                            "git" "branch" (if force "-D" "-d") branch)]
+            (when-not (zero? exit)
+              (binding [*out* *err*]
+                (println (str "  kept branch " branch " (" (str/trim err)
+                              "); rerun with --force to delete"))))))
+        (e/fire! :workspace-removed {:dst path})))))
 
 (defn- list-impl [_cfg _opts]
   (let [{:keys [exit out err]} (p/shell {:out :string :err :string :continue true}

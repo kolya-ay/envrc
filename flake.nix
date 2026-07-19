@@ -1,9 +1,10 @@
 {
-  description = "envrc";
+  description = "Envrc";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
-  outputs = { self, nixpkgs }:
+  outputs =
+    { self, nixpkgs }:
     let
       lib = nixpkgs.lib;
       systems = [
@@ -49,12 +50,14 @@
           bbDeps = import ./nix/bb-deps.nix { inherit (pkgs) fetchMavenArtifact; };
         in
         {
-          envrc-tests = pkgs.runCommand "envrc-tests" { nativeBuildInputs = [ pkgs.babashka ]; } ''
-            export BABASHKA_CLASSPATH="${bbDeps.classpath}:${./src}:${./test}:${./plugins/default}"
-            cd ${./.}
-            bb -m runner
-            touch "$out"
-          '';
+          envrc-tests =
+            pkgs.runCommand "envrc-tests" { nativeBuildInputs = [ pkgs.babashka ]; }
+              ''
+                export BABASHKA_CLASSPATH="${bbDeps.classpath}:${./src}:${./test}:${./plugins/default}"
+                cd ${./.}
+                bb -m runner
+                touch "$out"
+              '';
         }
       );
     };

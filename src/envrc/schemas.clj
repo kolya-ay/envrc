@@ -44,19 +44,21 @@
 
 (defn closest-match
   "Returns the closest candidate string. Consults `aliases` first; on miss
-   falls back to Levenshtein bounded by 80% of the longer string's length."
+   falls back to Levenshtein bounded by 80% of the longer string's length.
+   nil `s` yields nil (no match)."
   [s candidates]
-  (let [s' (name s)
-        candidate-set (set (map name candidates))
-        aliased (get aliases s')]
-    (or (when (contains? candidate-set aliased) aliased)
-        (let [scored (->> candidates
-                          (map (fn [c]
-                                 (let [c' (name c)]
-                                   [c (levenshtein s' c') (max (count s') (count c'))])))
-                          (filter (fn [[_ d longer]] (<= d (* 0.8 longer))))
-                          (sort-by second))]
-          (when (seq scored) (first (first scored)))))))
+  (when (some? s)
+    (let [s' (name s)
+          candidate-set (set (map name candidates))
+          aliased (get aliases s')]
+      (or (when (contains? candidate-set aliased) aliased)
+          (let [scored (->> candidates
+                            (map (fn [c]
+                                   (let [c' (name c)]
+                                     [c (levenshtein s' c') (max (count s') (count c'))])))
+                            (filter (fn [[_ d longer]] (<= d (* 0.8 longer))))
+                            (sort-by second))]
+            (when (seq scored) (first (first scored))))))))
 
 ;; ============================================================
 ;; Malli schemas — base shapes (plugin extension folded in by

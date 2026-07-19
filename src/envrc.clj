@@ -152,13 +152,17 @@
           handler     (or (get-in entry [:verbs resolved-kw])
                           (get-in entry [:verbs verb-kw]))]
       (when-not handler
-        (let [candidates (map name (keys (:verbs entry)))
-              suggestion (envrc.schemas/closest-match verb-name candidates)]
-          (throw (ex-info (str "envrc " cap-prefix ": unknown verb `" verb-name "`"
-                               (when suggestion (str "; did you mean `" suggestion "`?")))
-                          {:prefix cap-prefix :verb verb-name
-                           :available (sort candidates)
-                           :suggestion suggestion}))))
+        (let [candidates (sort (map name (keys (:verbs entry))))]
+          (if (str/blank? (str verb-name))
+            (throw (ex-info (str "envrc " cap-prefix ": missing verb; available: "
+                                 (str/join ", " candidates))
+                            {:prefix cap-prefix :available candidates}))
+            (let [suggestion (envrc.schemas/closest-match verb-name candidates)]
+              (throw (ex-info (str "envrc " cap-prefix ": unknown verb `" verb-name "`"
+                                   (when suggestion (str "; did you mean `" suggestion "`?")))
+                              {:prefix cap-prefix :verb verb-name
+                               :available candidates
+                               :suggestion suggestion}))))))
       (envrc.api/with-context (envrc.api/build-context cfg (toplevel))
         (handler cfg {:args (vec args) :opts (or opts {})})))))
 

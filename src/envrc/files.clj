@@ -49,7 +49,8 @@
 
 (defn link-into
   "Symlink <src-root>/<path> at <dst-root>/<path>, stripping leading `/`.
-   Returns :linked on create/replace, :ok when already correct, nil if src missing."
+   Returns :linked on create/replace, :ok when already correct,
+   :skipped when dst is a pre-existing real directory, nil if src missing."
   [src-root dst-root path]
   (let [p   (normalize-path path)
         src (str src-root "/" p)
@@ -59,6 +60,11 @@
       (cond
         (and (fs/sym-link? dst) (= src (str (fs/read-link dst))))
         :ok
+
+        ;; real (non-symlink) directory already present — likely git-tracked
+        ;; content checked out in the worktree; leave it, don't clobber.
+        (and (fs/directory? dst) (not (fs/sym-link? dst)))
+        :skipped
 
         (or (fs/exists? dst) (fs/sym-link? dst))
         (do (fs/delete dst) (fs/create-sym-link dst src) :linked)
@@ -132,5 +138,6 @@
                     :mirrored "mirror"
                     :ref      "ref"
                     :local    "local"
+                    :skipped  "skip"
                     nil)]
     (println (format "  %-7s %s" verb subject))))
