@@ -1,21 +1,13 @@
-{:paths ["src" "test"]
+{:paths ["src" "test" "plugins/default"]
+ :deps  {org.clj-commons/pretty        {:mvn/version "3.6.8"}
+         com.lambdaisland/dbus-client  {:mvn/version "0.2.15"}
+         com.lambdaisland/cli          {:mvn/version "1.27.121"}
+         borkdude/dynaload             {:mvn/version "0.3.5"}
+         borkdude/edamame              {:mvn/version "1.5.39"}
+         fipp/fipp                     {:mvn/version "0.6.29"}
+         metosin/malli                 {:mvn/version "0.20.1"}
+         mvxcvi/arrangement            {:mvn/version "2.1.0"}}
  :tasks
- {:requires ([babashka.process :refer [shell]]
-             [clojure.string :as str])
-  :init (def bb-cp
-          (str/trim
-           (:out
-            (shell {:out :string}
-                   "nix" "eval" "--raw" "--impure" "--expr"
-                   "let pkgs = import (builtins.getFlake \"github:NixOS/nixpkgs/nixos-26.05\").outPath { system = builtins.currentSystem; }; in (import ./nix/bb-deps.nix { inherit (pkgs) fetchMavenArtifact; }).classpath"))))
-
-  test (shell "bb" "-cp" (str bb-cp ":src:test:plugins/default") "-m" "runner")
-
-  cli (apply shell "bb" "-cp" (str bb-cp ":src:plugins/default") "-m" "envrc" "--" *command-line-args*)
-
-  nrepl (shell "bb" "-cp" (str bb-cp ":src:test:plugins/default") "nrepl-server")
-
-  nix-build (shell "nix" "build" ".#envrc")
-
-  check (do (run 'test)
-            (shell "nix" "flake" "check"))}}
+ {test  (shell "bb" "-m" "runner")
+  cli   (apply shell "bb" "-m" "envrc" "--" *command-line-args*)
+  nrepl (shell "bb" "nrepl-server")}}
