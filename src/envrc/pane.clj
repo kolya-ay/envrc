@@ -1,9 +1,9 @@
 (ns envrc.pane
-  (:require [clojure.string :as str]
-            [konsole.dbus :as dbus]
-            [konsole.session :as konsole]
-            [konsole.discovery :as disc]
-            [konsole.pane :as kpane]))
+  "Pure adaptive-resume decision logic for the :pane capability.
+   Given a pane's foreground command and a task's script, decide whether to
+   spawn, focus, or restart. Backend I/O (konsole, tmux, …) lives in a
+   machine-side :pane backend."
+  (:require [clojure.string :as str]))
 
 (def ^:private skip-prefixes
   #{"#" "cd" "export" "set" "unset" "local" "readonly" "PATH="})
@@ -28,54 +28,11 @@
        (some? token)
        (= (basename fg-cmd) (basename token))))
 
-(defn- decide [fg-cmd token]
+(defn decide
+  "Given the pane's foreground command (nil if pane absent) and the task's
+   first token, return :spawn, :focus, or :restart."
+  [fg-cmd token]
   (cond
     (nil? fg-cmd)           :spawn
     (matches? token fg-cmd) :focus
     :else                   :restart))
-
-(defn list-panes [conn]
-  (if-let [{:keys [svc]} (konsole/current-session-from-env)]
-    (vec (disc/list-panes-in-window conn svc))
-    []))
-
-(defn find-pane [pname panes]
-  (some #(when (= (:name %) pname) %) panes))
-
-(defn spawn! [conn pname body pane-spec]
-  (kpane/spawn conn pname ["bash" "-c" body]
-               :vertical (= (:split pane-spec) "vertical")
-               :size     (:size pane-spec)))
-
-(defn send! [conn pname body]
-  (kpane/send conn pname body))
-
-(defn focus! [conn pname]
-  (kpane/focus conn pname))
-
-(defn signal! [conn pname sig]
-  (kpane/send-signal conn pname sig))
-
-(defn dispatch
-  "pname = pane-name (str), body = expanded bash script, pane-spec = the :panes entry.
-   Adaptive resume:
-   - pane absent           → spawn + send body
-   - pane present, matches → focus
-   - pane present, differs → SIGINT, send body, focus"
-  [pname body pane-spec]
-  (dbus/with-conn [c]
-    (let [panes  (list-panes c)
-          pane   (find-pane pname panes)
-          fg     (:fg-cmd pane)
-          action (decide fg (first-token body))]
-      (case action
-        :spawn   (spawn! c pname body pane-spec)
-        :focus   (focus! c pname)
-        :restart (do (binding [*out* *err*]
-                       (println (str "re-running " pname " in pane :" pname)))
-                     (signal! c pname "INT")
-                     ;; brief pause so SIGINT lands before the new body is sent
-                     (Thread/sleep 200)
-                     (send! c pname body)
-                     (focus! c pname)))
-      nil)))

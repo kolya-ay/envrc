@@ -72,13 +72,6 @@
 
 (defn- normalize-tokens [cfg]
   (cond-> cfg
-    (get-in cfg [:use :konsole :panes])
-    (update-in [:use :konsole :panes]
-               (fn [ps]
-                 (mapv (fn [p]
-                         (cond-> p (:name p) (update :name as-keyword)))
-                       ps)))
-
     (:tasks cfg)
     (update :tasks
             (fn [cmds]

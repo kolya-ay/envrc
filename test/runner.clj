@@ -8,6 +8,7 @@
               envrc.worktree-test
               envrc.files-test
               envrc.schemas-test
+              envrc.pane-test
               ;; --- moved: pure-require core tests ---
               envrc-test
               envrc.aliases-test envrc.api-test envrc.capabilities-test

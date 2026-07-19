@@ -23,13 +23,6 @@
         normed (#'kc/normalize-tokens global)]
     (is (= ["bun run dev"] (get-in normed [:tasks :dev :run])))))
 
-(deftest normalize-pane-names-to-keywords
-  (let [global {:use {:konsole {:panes [{:name "agent" :focus true}
-                                     {:name ":scratch" :split "horizontal"}]}}}
-        normed (#'kc/normalize-tokens global)]
-    (is (= [:agent :scratch]
-           (mapv :name (get-in normed [:use :konsole :panes]))))))
-
 (deftest load-config-merges-commands-from-global-and-project
   ;; project :tasks extends, not replaces, global :tasks so global-defined
   ;; tasks remain available alongside project-defined commands.
