@@ -49,3 +49,45 @@
     (is (contains? (get-in d ["pane"   :verbs]) :spawn))
     (is (contains? (get-in d ["ws"     :verbs]) :new))
     (is (contains? (get-in d ["deploy" :verbs]) :run))))
+
+(deftest self-contained-root-default-paths
+  (testing "a plugin's co-located helper resolves with no bb.edn (default :paths [\".\"])"
+    (let [dir (str (fs/create-temp-dir {:prefix "envrc-plugin-cp-"}))]
+      (try
+        (fs/create-dirs (fs/file dir "helper"))
+        (spit (str (fs/file dir "helper" "util.clj"))
+              "(ns helper.util) (def token :ok)")
+        (spit (str (fs/file dir "demo.clj"))
+              "(ns envrc.plugin.demo (:require [helper.util :as u])) (def plugin {:id \"demo\" :val u/token})")
+        (let [plugins (plugin/discover {:global dir})]
+          (is (= :ok (get-in plugins ["demo" :val]))))
+        (finally (fs/delete-tree dir))))))
+
+(deftest self-contained-root-bb-edn-paths
+  (testing "bb.edn :paths overrides the default root classpath"
+    (let [dir (str (fs/create-temp-dir {:prefix "envrc-plugin-cp-"}))]
+      (try
+        (spit (str (fs/file dir "bb.edn")) "{:paths [\"lib\"]}")
+        (fs/create-dirs (fs/file dir "lib" "helper2"))
+        (spit (str (fs/file dir "lib" "helper2" "util.clj"))
+              "(ns helper2.util) (def token :fromlib)")
+        (spit (str (fs/file dir "demo2.clj"))
+              "(ns envrc.plugin.demo2 (:require [helper2.util :as u])) (def plugin {:id \"demo2\" :val u/token})")
+        (let [plugins (plugin/discover {:global dir})]
+          (is (= :fromlib (get-in plugins ["demo2" :val]))))
+        (finally (fs/delete-tree dir))))))
+
+(deftest self-contained-root-absolute-paths
+  (testing "an absolute bb.edn :paths entry is used as-is, not joined to the root (no crash)"
+    (let [libdir (str (fs/create-temp-dir {:prefix "envrc-plugin-lib-"}))
+          dir    (str (fs/create-temp-dir {:prefix "envrc-plugin-cp-"}))]
+      (try
+        (fs/create-dirs (fs/file libdir "helper3"))
+        (spit (str (fs/file libdir "helper3" "util.clj"))
+              "(ns helper3.util) (def token :abs)")
+        (spit (str (fs/file dir "bb.edn")) (str "{:paths [\"" libdir "\"]}"))
+        (spit (str (fs/file dir "demo3.clj"))
+              "(ns envrc.plugin.demo3 (:require [helper3.util :as u])) (def plugin {:id \"demo3\" :val u/token})")
+        (let [plugins (plugin/discover {:global dir})]
+          (is (= :abs (get-in plugins ["demo3" :val]))))
+        (finally (fs/delete-tree dir) (fs/delete-tree libdir))))))

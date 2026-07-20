@@ -1,5 +1,7 @@
 (ns envrc.plugin
-  (:require [babashka.fs :as fs]
+  (:require [babashka.classpath :as cp]
+            [babashka.fs :as fs]
+            [clojure.edn :as edn]
             [clojure.string :as str]
             [envrc.capabilities :as caps]))
 
@@ -14,11 +16,27 @@
                  :id     (or (:id @v) (str base)))))))
 
 
+(defn- root-classpath-paths
+  "Classpath entries a plugin root contributes: its bb.edn :paths (relative to the
+   root), or [\".\"] (the root itself) when there's no bb.edn / no :paths / unreadable."
+  [dir]
+  (let [bb (fs/file dir "bb.edn")]
+    (or (when (fs/exists? bb)
+          (try (:paths (edn/read-string (slurp (str bb))))
+               (catch Exception _ nil)))
+        ["."])))
+
+(defn- add-root-classpath! [dir]
+  (doseq [p (root-classpath-paths dir)]
+    (cp/add-classpath (if (fs/absolute? p) (str p) (str (fs/file dir p))))))
+
 (defn- scan-dir [dir source]
   (if (and dir (fs/directory? dir))
-    (->> (fs/list-dir dir "*.clj")
-         (map #(load-plugin-file % source))
-         (remove nil?))
+    (do
+      (add-root-classpath! dir)
+      (->> (fs/list-dir dir "*.clj")
+           (map #(load-plugin-file % source))
+           (remove nil?)))
     []))
 (defn- normalize-roots [roots]
   (cond
