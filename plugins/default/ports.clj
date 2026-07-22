@@ -14,7 +14,6 @@
    [:base   pos-int?]
    [:stride {:optional true} pos-int?]
    [:vars   [:vector {:min 1} keyword?]]
-   [:derive {:optional true} [:map-of keyword? string?]]
    [:offset {:optional true} [:int {:min 0 :max 99}]]])
 
 (defn env-offset

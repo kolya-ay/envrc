@@ -40,11 +40,16 @@
   (let [out ((ports-shell)
              {:project {:workspace "feature--auth"}
               :use {:ports {:base 4000 :stride 10
-                            :vars [:AIST_PORT :UI_PORT]
-                            :derive {:SERVER_URL "http://127.0.0.1:${AIST_PORT}"}}}})]
+                            :vars [:AIST_PORT :UI_PORT]}}})]
     (is (re-find #"(?m)^export AIST_PORT='\d+'$" out))
     (is (re-find #"(?m)^export UI_PORT='\d+'$" out))
-    (is (re-find #"(?m)^export SERVER_URL='http://127\.0\.0\.1:\d+'$" out))))
+    (is (not (re-find #"SERVER_URL" out)))))
+
+(deftest schema-rejects-derive
+  (is (thrown? Exception
+        (v/validate! (use-schema)
+                     {:base 4000 :vars [:A] :derive {:URL "http://127.0.0.1:${A}"}}
+                     :reason :invalid-use-slot))))
 
 ;; -----------------------------------------------------------------
 ;; Override precedence: env > config :offset > hash

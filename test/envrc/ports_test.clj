@@ -28,36 +28,16 @@
   (is (= 4731 (ports/slot-port 4000 10 73 1))))
 
 ;; -----------------------------------------------------------------
-;; expand-template
-;; -----------------------------------------------------------------
-
-(deftest expand-template-substitutes-known-keys
-  (is (= "http://127.0.0.1:4730"
-         (ports/expand-template "http://127.0.0.1:${P}" {:P "4730"}))))
-
-(deftest expand-template-multiple-vars
-  (is (= "4730+4731"
-         (ports/expand-template "${A}+${B}" {:A "4730" :B "4731"}))))
-
-(deftest expand-template-unknown-var-raises-with-name
-  (is (thrown-with-msg? Exception #"unknown \$\{MISSING\}"
-        (ports/expand-template "x${MISSING}y" {:P "4730"}))))
-
-;; -----------------------------------------------------------------
 ;; build-exports
 ;; -----------------------------------------------------------------
 
-(deftest build-exports-vars-then-derive-in-order
+(deftest build-exports-emits-only-deterministic-port-vars
   (let [out (ports/build-exports
               {:base   4000
                :stride 10
-               :vars   [:A :B]
-               :derive {:URL  "http://${A}"
-                        :PAIR "${A}-${B}-${URL}"}}
+               :vars   [:A :B]}
               73)]
-    (is (= [[:A "4730"] [:B "4731"]
-            [:URL "http://4730"]
-            [:PAIR "4730-4731-http://4730"]]
+    (is (= [[:A "4730"] [:B "4731"]]
            out))))
 
 (deftest build-exports-no-derive
@@ -75,13 +55,6 @@
   (is (thrown-with-msg? Exception #":stride 2 < \(count :vars\) 3"
         (ports/build-exports
           {:base 4000 :stride 2 :vars [:A :B :C]} 0))))
-
-(deftest build-exports-rejects-quote-in-derived-value
-  (is (thrown-with-msg? Exception #"contains single quote"
-        (ports/build-exports
-          {:base 4000 :stride 10 :vars [:A]
-           :derive {:BAD "ohno'"}}
-          0))))
 
 ;; -----------------------------------------------------------------
 ;; shell-lines: quoting round-trip via bash

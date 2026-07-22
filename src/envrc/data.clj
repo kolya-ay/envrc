@@ -5,6 +5,7 @@
             [envrc.aliases :as envrc.aliases]
             [envrc.config :as econf]
             [envrc.dirs :as envrc.dirs]
+            [envrc.env :as env]
             [envrc.git :as envrc.git]
             [envrc.plugin :as envrc.plugin]
             [envrc.provides :as envrc.provides]
@@ -296,8 +297,11 @@
                         :title     (:title entry)
                         :scope     (keyword (:scope entry))
                         :workspace ws})
-        with-plugins (assoc with-plugins :project project-info)]
-    (-> with-plugins
+        with-project (assoc with-plugins :project project-info)
+        resolved-env (env/global-env with-project)]
+    (-> with-project
         validate-alias-targets
+        (assoc :env resolved-env)
         (cond-> (seq resolved-config) (assoc :config resolved-config))
-        normalize-tokens)))
+        normalize-tokens))
+)

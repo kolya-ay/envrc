@@ -1,6 +1,6 @@
 (ns envrc.ports
   "Pure logic for deterministic per-worktree port assignment.
-   Hash → offset (0..99), slot math, template expansion, shell-line builder.
+   Hash → offset (0..99), slot math, shell-line builder.
    No I/O, no env reads — the thin plugin in envrc.plugin.ports handles those."
   (:require [clojure.string :as str]))
 
@@ -24,19 +24,6 @@
   [base stride offset i]
   (+ base (* offset stride) i))
 
-(defn expand-template
-  "Expand `${VAR}` in `tpl` against `resolved` (map of keyword → string).
-   Throws naming the missing key for any unresolved ${X}."
-  [tpl resolved]
-  (str/replace tpl #"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"
-               (fn [[_ var-name]]
-                 (let [k (keyword var-name)]
-                   (if-let [v (get resolved k)]
-                     (str v)
-                     (throw (ex-info (str "envrc.ports: unknown ${" var-name
-                                          "} in :derive template")
-                                     {:var var-name :template tpl})))))))
-
 (defn- validate-stride!
   "Raise if stride < (count vars) — adjacent offsets would overlap."
   [stride vars]
@@ -46,34 +33,14 @@
                            n " — adjacent worktree offsets would overlap")
                       {:stride stride :vars vars})))))
 
-(defn- validate-template-value!
-  "Raise if a derived value contains `'` — would break the single-quoted
-   shell export the emitter produces."
-  [k v]
-  (when (str/includes? (str v) "'")
-    (throw (ex-info (str "envrc.ports: derived value for " k
-                         " contains single quote, which breaks shell quoting")
-                    {:key k :value v}))))
 
 (defn build-exports
-  "Returns an ordered seq of [var-keyword value-string] pairs.
-   Walks `:vars` first (literal port numbers), then `:derive` in declaration
-   order with each derived value visible to subsequent derives."
-  [{:keys [base stride vars derive] :or {stride 10}} off]
+  "Returns an ordered seq of [var-keyword value-string] pairs for deterministic ports."
+  [{:keys [base stride vars] :or {stride 10}} off]
   (validate-stride! stride vars)
-  (let [var-pairs (mapv (fn [i v] [v (str (slot-port base stride off i))])
-                        (range) vars)
-        resolved-init (into {} var-pairs)]
-    (loop [resolved resolved-init
-           acc      var-pairs
-           todo     (seq derive)]
-      (if-let [[k tpl] (first todo)]
-        (let [v (expand-template tpl resolved)]
-          (validate-template-value! k v)
-          (recur (assoc resolved k v)
-                 (conj acc [k v])
-                 (rest todo)))
-        acc))))
+  (mapv (fn [i v] [v (str (slot-port base stride off i))])
+        (range)
+        vars))
 
 (defn shell-lines
   "Format `[var value]` pairs as `export VAR='value'` lines."

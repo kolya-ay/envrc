@@ -15,7 +15,6 @@
    :use {:ports {:base 4000
                  :stride 10
                  :vars [:AIST_PORT :UI_PORT]
-                 :derive {:SERVER_URL "http://127.0.0.1:${AIST_PORT}"}
                  :offset 7}}})
 
 (deftest brief-status-renders-resolved-ports
@@ -24,7 +23,7 @@
     (is (str/includes? out "ports — offset=7"))
     (is (str/includes? out "AIST_PORT=4070"))
     (is (str/includes? out "UI_PORT=4071"))
-    (is (str/includes? out "SERVER_URL=http://127.0.0.1:4070"))))
+    (is (not (str/includes? out "SERVER_URL")))))
 
 (deftest verbose-status-renders-table
   (let [status-impl (ports-var 'status-impl)
@@ -34,7 +33,7 @@
     (is (str/includes? out "4070"))
     (is (str/includes? out "UI_PORT"))
     (is (str/includes? out "4071"))
-    (is (str/includes? out "SERVER_URL"))))
+    (is (not (str/includes? out "SERVER_URL")))))
 
 (deftest verbose-status-reports-unconfigured
   (is (= "Ports: not configured.\n"

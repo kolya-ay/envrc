@@ -40,3 +40,11 @@
     (is (= :cfg (:input emitter)))
     (is (= :raw (:encode emitter)))
     (is (fn? (:transform emitter)))))
+
+(deftest render-env-uses-resolved-string-values
+  (let [render (resolve 'envrc.plugin.flake/render)
+        out (render {:env {:PORT "3000"
+                           :URL "http://127.0.0.1:2000:3000"}}
+                    "# @@env@@")]
+    (is (clojure.string/includes? out "\"URL\" = \"http://127.0.0.1:2000:3000\";"))
+    (is (not (clojure.string/includes? out "${PORT}")))))
