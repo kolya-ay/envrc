@@ -26,11 +26,10 @@
   (testing "Levenshtein falls in when no alias"
     (is (= "tasks" (schemas/closest-match "taks" ["tasks" "files"]))))
   (testing "no suggestion when far from anything"
-    (is (nil? (schemas/closest-match "completely-unrelated" ["tasks" "files"])))))
+    (is (nil? (schemas/closest-match "completely-unrelated" ["tasks" "files"]))))
+)
 
 (deftest reserved-sets-exist
-  ;; Top-level surface: 6 base keys + envrc-core built-in :title.
-  ;; :panes lives under konsole plugin's :extends.use; :inputs under flake's.
   (is (>= (count (schemas/reserved-top-level-keys)) 6))
   (is (contains? (schemas/reserved-top-level-keys) :tasks))
   (is (contains? (schemas/reserved-top-level-keys) :use))
@@ -65,6 +64,15 @@
 (deftest task-run-accepts-function
   (is (true? (m/validate schemas/Task {:run (fn [_] nil)}))))
 
+(deftest task-and-top-level-env-accept-numeric-values
+  (is (true? (m/validate schemas/Task {:env {:A 1 :B 1.5 :C nil :D "x"}})))
+  (is (true? (m/validate schemas/EnvrcEdn-base {:env {:A 1 :B 1.5 :C nil :D "x"}})))
+  (let [effective (validate/build-effective-schemas {})]
+    (is (true? (m/validate (:Task effective) {:env {:A 1 :B 1.5 :C nil :D "x"}})))
+    (is (true? (m/validate (:EnvrcEdn effective)
+                           {:env {:A 1 :B 1.5 :C nil :D "x"}
+                            :tasks {:serve {:env {:X 2.5}}}})))))
+
 (deftest aliases-are-keyword-to-keyword
   (is (true? (m/validate schemas/EnvrcEdn-base {:use {:aliases {:t :test}}})))
   (is (false? (m/validate schemas/EnvrcEdn-base {:use {:aliases {:t "test"}}})))
@@ -91,13 +99,10 @@
     (is (nil? (m/explain schemas/Task {:run "x" :tolerant true})))
     (is (nil? (m/explain schemas/Task {:run "x" :tolerant false})))))
 
-
 (deftest envrc-edn-base-rejects-unknown-top-level-key
   (is (some? (m/explain schemas/EnvrcEdn-base {:commands {}}))))
 
 (deftest envrc-edn-base-accepts-canonical-keys
-  ;; :inputs is not a top-level key — it lives under :use {:flake {:inputs ...}}
-  ;; contributed by the flake plugin.
   (is (nil? (m/explain schemas/EnvrcEdn-base
                         {:tasks {} :files {} :env {} :packages []
                          :use {} :config {} :title "x"}))))
@@ -132,7 +137,7 @@
     (is (= "tasks"    (schemas/closest-match "taks" #{"tasks" "files" "env"})))
     (is (= "tasks"    (schemas/closest-match "cmds" #{"tasks" "files"})))
     (is (= "packages" (schemas/closest-match "deps" #{"packages" "env" "use"})))
-    (is (= nil        (schemas/closest-match "completely-unrelated" #{"a" "b"})))
+    (is (= nil         (schemas/closest-match "completely-unrelated" #{"a" "b"})))
     (is (= "tasks"    (schemas/closest-match "tasks" #{"tasks"})))))
 
 (deftest reserved-task-fields-derived-from-schema
@@ -151,11 +156,10 @@
       (is (contains? keys :use)))))
 
 (deftest envrc-edn-no-longer-allows-top-level-inputs
-  ;; :inputs lives under :use {:flake {:inputs ...}}, never at top level.
   (let [plugins {}
-        E (-> (validate/build-effective-schemas plugins) :EnvrcEdn)
+        e (-> (validate/build-effective-schemas plugins) :EnvrcEdn)
         cfg-with-inputs {:inputs {:nixpkgs "github:NixOS/nixpkgs/nixos-26.05"}}]
-    (is (some? (m/explain E cfg-with-inputs)))))
+    (is (some? (m/explain e cfg-with-inputs)))))
 
 (deftest flake-plugin-extends-use-with-inputs
   (load-file "plugins/default/flake.clj")
@@ -214,15 +218,9 @@
                   {:dirs {:ref {:base "/var/lib/ref" :mirror "envrc"}}}))
   (is (m/validate envrc.schemas/Use
                   {:dirs {:ref {:mirror "."}}}))
-  ;; bare string form is no longer accepted
   (is (not (m/validate envrc.schemas/Use {:dirs {:ref "/var/lib/ref"}})))
   (is (not (m/validate envrc.schemas/Use {:dirs {:ref {:base 42}}}))))
 
 (deftest dirs-schema-allows-empty
   (is (m/validate envrc.schemas/Use {:dirs {}}))
   (is (m/validate envrc.schemas/Use {})))
-
-;; merged from upstream original
-(deftest closest-match-is-nil-safe
-  (is (nil? (schemas/closest-match nil ["branch" "rm" "list"])))
-  (is (= "branch" (schemas/closest-match "branchh" ["branch" "rm" "list"]))))

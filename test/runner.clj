@@ -22,6 +22,7 @@
               ;; --- moved: plugin-loader core tests ---
               envrc.flake-test envrc.gen-test envrc.local-test
               envrc.project-test envrc.ref-test envrc.skills-test
+              envrc.env-test
               envrc.plugin.ports-test envrc.plugin.process-compose-test
               envrc.plugin.project-test envrc.plugin.worktree-test]]
     (doseq [n nss] (require n))

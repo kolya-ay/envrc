@@ -88,7 +88,7 @@
    [:label    {:optional true} string?]
    [:group    {:optional true} string?]
    [:run      {:optional true} Run]
-   [:env      {:optional true} [:map-of keyword? [:maybe string?]]]
+  [:env      {:optional true} [:map-of keyword? [:maybe [:or string? number?]]]]
    [:on       {:optional true} [:or Event [:sequential Event]]]
    [:show     {:optional true} [:map [:pane keyword?]]]
    [:service  {:optional true} boolean?]
@@ -131,7 +131,7 @@
   [:map {:closed true}
    [:tasks    {:optional true} Tasks]
    [:files    {:optional true} Files]
-   [:env      {:optional true} [:map-of keyword? [:maybe string?]]]
+  [:env      {:optional true} [:map-of keyword? [:maybe [:or string? number?]]]]
    [:packages {:optional true} [:sequential :any]]
    [:use      {:optional true} Use]
    [:config   {:optional true} :any]
