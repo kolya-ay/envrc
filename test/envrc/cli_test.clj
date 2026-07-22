@@ -11,14 +11,22 @@
         invocation (#'cli/build-invocation cfg "t" {:toplevel "/repo"} [])]
     (is (= ["direnv" "exec" "/repo" "bb" "test"] invocation))))
 
-(deftest build-invocation-applies-task-env
-  (let [cfg {:tasks {:test {:run ["sh" "-c" "test \"$FOO\" = bar"]
-                            :env {:FOO "bar"}}}
-             :use {:aliases {:t :test}}}
+(deftest build-invocation-applies-resolved-task-env
+  (let [cfg {:use {:aliases {:t :test}
+                    :ports {:base 4000 :stride 10 :vars [:PORT] :offset 7}}
+             :env {:GLOBAL "global" :SECRET "secret"}
+             :tasks {:test {:run ["sh" "-c" "test \"$PORT\" = 9000"]
+                            :env {:PORT 9000
+                                  :URL "http://127.0.0.1:${PORT}"
+                                  :SECRET nil}}}}
         invocation (#'cli/build-invocation cfg "t" {:toplevel "/repo"} [])]
-    (is (= ["direnv" "exec" "/repo" "env" "FOO=bar"
-            "sh" "-c" "test \"$FOO\" = bar"]
-           invocation))))
+    (is (= ["direnv" "exec" "/repo" "env" "-u" "SECRET"]
+           (subvec invocation 0 6)))
+    (is (= ["sh" "-c" "test \"$PORT\" = 9000"]
+           (subvec invocation (- (count invocation) 3))))
+    (let [assignments (->> (subvec invocation 6 (- (count invocation) 3)) sort vec)]
+      (is (= ["GLOBAL=global" "PORT=9000" "URL=http://127.0.0.1:9000"]
+             assignments)))))
 
 (deftest build-invocation-does-not-fallback-to-task-name
   (let [cfg {:tasks {:test {:run ["bb" "test"]}}
@@ -58,8 +66,6 @@
     (is (= 2 @calls))))
 
 (deftest apply-binds-context-end-to-end
-  ;; Verifies that dispatch-apply wraps handlers in envrc.api/with-context so
-  ;; envrc.api/root returns the project root instead of nil.
   (let [root (str (fs/create-temp-dir))
         seen-root (atom nil)
         test-plugin {:id "test" :handles #{:foo}
@@ -77,21 +83,17 @@
                                :verbs    {:list (fn [_ {:keys [args]}]
                                                   (swap! calls conj [:list args]))}}}
                :plugins  {"xp" {}}}]
-    (with-redefs [envrc/toplevel (constantly "/tmp")
-                  envrc.api/build-context (constantly {})]
+    (with-redefs [envrc/toplevel (constantly "/tmp")]
       (#'envrc/dispatch-capability cfg "x" "ls" {} ["a"]))
     (is (= [[:list ["a"]]] @calls))))
 
 (deftest verb-lookup-falls-back-to-canonical-when-no-alias
-  ;; When the typed verb isn't aliased, it's looked up canonically.
-  ;; (Verifies the fallback path used by e.g. worktree's `:rm`.)
   (let [calls (atom [])
         cfg   {:dispatch {"x" {:plugin {:id "xp"}
                                :verbs  {:rm (fn [_ {:keys [args]}]
                                               (swap! calls conj [:rm args]))}}}
-               :plugins  {"xp" {}}}]
-    (with-redefs [envrc/toplevel (constantly "/tmp")
-                  envrc.api/build-context (constantly {})]
+               :plugins {"xp" {}}}]
+    (with-redefs [envrc/toplevel (constantly "/tmp")]
       (#'envrc/dispatch-capability cfg "x" "rm" {} []))
     (is (= [[:rm []]] @calls))))
 
@@ -103,18 +105,14 @@
 
 (deftest dispatch-apply-routes-to-plugin-with-matching-handles
   (let [calls (atom [])
-        cfg   {:plugins {"wt" {:handles #{:link :copy}
-                                :cli {:apply (fn [_ {:keys [label args]}]
-                                                (swap! calls conj [label args]))}}}}]
-    (with-redefs [envrc/toplevel (constantly "/tmp")
-                  envrc.api/build-context (constantly {})]
-      (#'envrc/dispatch-apply cfg ["link" "extra"]))
+        cfg   {:plugins {"x" {:id "x"
+                               :handles #{:link}
+                               :cli {:apply (fn [_ {:keys [label args]}]
+                                              (swap! calls conj [label args]))}}}}]
+    (envrc/dispatch-apply cfg ["link" "extra"])
     (is (= [[:link ["extra"]]] @calls))))
 
 (deftest dispatch-apply-errors-on-unknown-label
-  (let [cfg {:plugins {"wt" {:handles #{:link}
-                              :cli {:apply (fn [_ _] nil)}}}}]
-    (with-redefs [envrc/toplevel (constantly "/tmp")
-                  envrc.api/build-context (constantly {})]
-      (is (thrown-with-msg? Exception #"unknown label `copy`"
-            (#'envrc/dispatch-apply cfg ["copy"]))))))
+  (let [cfg {:plugins {"x" {:id "x" :handles #{:link}}}}]
+    (is (thrown-with-msg? Exception #"unknown label `copy`"
+          (#'envrc/dispatch-apply cfg ["copy"])))))

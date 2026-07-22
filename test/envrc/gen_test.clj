@@ -39,6 +39,26 @@
     (is (= "bun" (:command out)))
     (is (= ["dev"] (:args out)))))
 
+(deftest zed-transform-unsets-inherited-env
+  (let [transform (-> @(resolve 'envrc.plugin.zed-emit/plugin)
+                      (get-in [:extends :emitters :zed :transform]))
+        out (transform {:env {:SECRET "secret"}}
+                       :my-task :my-task
+                       {:label "Dev" :run "echo $SECRET" :env {:SECRET nil}})]
+    (is (= {"SECRET" nil} (:env out)))
+    (is (= "env -u SECRET -- sh -c 'echo $SECRET'" (:command out)))
+    (is (= "system" (:shell out)))))
+
+(deftest vscode-transform-unsets-inherited-env
+  (let [transform (-> @(resolve 'envrc.plugin.vscode-emit/plugin)
+                      (get-in [:extends :emitters :vscode :transform]))
+        out (transform {:env {:SECRET "secret"}}
+                       :my-task :my-task
+                       {:label "Dev" :run "echo $SECRET" :env {:SECRET nil}})]
+    (is (= {"SECRET" nil} (get-in out [:options :env])))
+    (is (= "env -u SECRET -- sh -c 'echo $SECRET'" (:command out)))
+    (is (= "shell" (:type out)))))
+
 (deftest user-invokable-filter
   (is (false? (user-invokable? {:on :shell})))
   (is (false? (user-invokable? {:on :gen})))

@@ -1,17 +1,12 @@
 (ns envrc.run
   (:require [babashka.process :as p]
-            [clojure.string :as str]))
-
-(defn- env-map [task]
-  (into {}
-        (map (fn [[k v]] [(name k) v]))
-        (:env task)))
+            [clojure.string :as str]
+            [envrc.env :as envrc.env]))
 
 (defn- argv? [x]
   (and (sequential? x)
        (seq x)
        (every? string? x)))
-
 
 (defn- invalid-run [task-name msg data]
   (throw (ex-info (str "envrc: task " task-name " " msg)
@@ -24,14 +19,23 @@
     (argv? value) (vec value)
     :else (invalid-run task-name "returned invalid :run value" {:value value})))
 
+(defn task-env-resolution
+  [cfg task]
+  (let [{:keys [set unset]} (envrc.env/task-env cfg task)]
+    {:set (into (sorted-map)
+                (map (fn [[k v]] [(name k) (str v)]))
+                set)
+     :unset (->> unset (map name) sort vec)}))
+
 (defn- context [cfg task-name task {:keys [root event payload] :as _ctx}]
-  {:cfg cfg
-   :task-name task-name
-   :task task
-   :root root
-   :env (env-map task)
-   :event event
-   :payload payload})
+  (let [{:keys [set]} (task-env-resolution cfg task)]
+    {:cfg cfg
+     :task-name task-name
+     :task task
+     :root root
+     :env set
+     :event event
+     :payload payload}))
 
 (defn evaluate
   [cfg task-name task ctx]
@@ -52,19 +56,36 @@
       :else
       (invalid-run task-name "has invalid :run" {:run run}))))
 
+(defn- shell-quote [s]
+  (str "'" (str/replace s "'" "'\\''") "'"))
+
+(defn- wrap-unset-argv
+  [argv unset]
+  (if (seq unset)
+    (into ["env"]
+          (concat (mapcat (fn [name] ["-u" name]) unset)
+                  ["--"]
+                  argv))
+    argv))
+
+(defn wrap-unset-shell-command
+  [body unset]
+  (if (seq unset)
+    (str/join " " (wrap-unset-argv ["sh" "-c" (shell-quote body)] unset))
+    body))
+
 (defn execute
   [cfg task-name task ctx]
   (let [result (evaluate cfg task-name task ctx)
-        env (env-map task)
+        {:keys [set unset]} (task-env-resolution cfg task)
         opts (cond-> {:inherit true :continue true}
-               (seq env) (assoc :extra-env env))]
+               (seq set) (assoc :extra-env set))]
     (cond
       (nil? result) {:exit 0}
-      (string? result) (p/shell opts result)
-      :else (apply p/process opts result))))
-
-(defn- shell-quote [s]
-  (str "'" (str/replace s "'" "'\\''") "'"))
+      (string? result) (if (seq unset)
+                         (-> (apply p/process opts (wrap-unset-argv ["sh" "-c" result] unset)) deref)
+                         (p/shell opts result))
+      :else (apply p/process opts (wrap-unset-argv result unset)))))
 
 (defn shell-body
   ([cfg task-name task ctx]
@@ -89,13 +110,14 @@
   [cfg alias task-name task ctx editor]
   (let [result (evaluate cfg task-name task ctx)
         label (or (:label task) (some-> alias name) (name task-name))
-        env (or (:env task) {})]
+        {:keys [set unset]} (task-env-resolution cfg task)
+        env (merge set (zipmap unset (repeat nil)))]
     (when result
       (case editor
         :vscode
         (let [base {:label label :options {:env env}}]
           (if (string? result)
-            (assoc base :type "shell" :command result)
+            (assoc base :type "shell" :command (wrap-unset-shell-command result unset))
             (assoc base :type "process"
                         :command (first result)
                         :args (vec (rest result)))))
@@ -103,6 +125,7 @@
         :zed
         (let [base {:label label :env env}]
           (if (string? result)
-            (assoc base :command result :shell "system")
+            (assoc base :command (wrap-unset-shell-command result unset) :shell "system")
             (assoc base :command (first result)
-                        :args (vec (rest result)))))))))
+                        :args (vec (rest result))))))))
+)

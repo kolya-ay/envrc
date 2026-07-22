@@ -45,32 +45,29 @@
        (sort-by key)
        (mapv (fn [[k v]] (str (name k) "=" v)))))
 
+(defn- wrap-unset-command [body unset]
+  (run/wrap-unset-shell-command body unset))
+
 (defn- service->pc-process [cfg svc-name spec]
   (let [body  (run->body cfg svc-name spec)
         ;; Supervisor / passthrough fields nest under :process-compose;
         ;; process-compose passes through any unknown YAML keys, so ad-hoc
         ;; fields under :process-compose flow straight to the YAML output.
         pc    (:process-compose spec)
-        base  {:command body}
-        env   (:env spec)]
+        {:keys [set unset]} (run/task-env-resolution cfg spec)
+        base  {:command (wrap-unset-command body unset)}]
     (cond-> (merge base (transform-keys pc))
-      env (assoc :environment (env-map->list env)))))
-
-(defn- merge-env [services]
-  (->> (sort-by key services)              ; deterministic order
-       (map (fn [[_ spec]] (:env spec)))
-       (reduce merge {})))
+      (seq set) (assoc :environment (env-map->list set)))))
 
 (defn transpile
-  "Pure: cfg -> {:yaml string :env map}. Reads :service-flagged entries
+  "Pure: cfg -> {:yaml string}. Reads :service-flagged entries
    from cfg's unified :tasks map."
   [cfg]
   (let [services (service-tasks cfg)
         processes (into (sorted-map)
                         (map (fn [[k v]] [k (service->pc-process cfg k v)]))
                         services)]
-    {:yaml (yaml/generate-string {:processes processes} {:dumper-options {:flow-style :block}})
-     :env  (merge-env services)}))
+    {:yaml (yaml/generate-string {:processes processes} {:dumper-options {:flow-style :block}})}))
 
 (defn up-pc
   "Side-effecting: write YAML into state-dir, then launch process-compose.

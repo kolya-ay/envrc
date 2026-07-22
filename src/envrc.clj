@@ -111,12 +111,14 @@
                          :suggestion suggestion}))))
     (let [task   (get-in cfg [:tasks task-name])
           result (envrc.run/evaluate cfg task-name task {:root toplevel})
-          env    (into {} (map (fn [[k v]] [(name k) v])) (:env task))
+          {:keys [set unset]} (envrc.run/task-env-resolution cfg task)
+          env-argv (vec (concat (mapcat (fn [name] ["-u" name]) unset)
+                                (map (fn [[k v]] (str k "=" v)) set)))
           with-env (fn [argv]
-                     (if (seq env)
-                       (into ["direnv" "exec" toplevel "env"]
-                             (concat (map (fn [[k v]] (str k "=" v)) env) argv))
-                       (into ["direnv" "exec" toplevel] argv)))]
+                     (let [prefix ["direnv" "exec" toplevel]]
+                       (if (seq env-argv)
+                         (into prefix (concat ["env"] env-argv argv))
+                         (into prefix argv))))]
       (cond
         (nil? result)
         ["true"]

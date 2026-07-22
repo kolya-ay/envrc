@@ -20,14 +20,28 @@
     (is (str/includes? (:yaml out) "db:"))
     (is (str/includes? (:yaml out) "command:"))
     (is (str/includes? (:yaml out) "pg_ctl start"))
-    (is (= {} (:env out)))))
+    (is (= #{:yaml} (set (keys out))))))
 
-(deftest transpile-merges-service-env
+(deftest transpile-resolves-service-env-per-service
   (let [out (svc/transpile
-              {:tasks {:db  {:run ["x"] :service true :env {:PGHOST "/tmp" :PGPORT "5432"}}
-                       :app {:run ["y"] :service true :env {:DATABASE_URL "postgres://"}}}})]
-    (is (= {:PGHOST "/tmp" :PGPORT "5432" :DATABASE_URL "postgres://"}
-           (:env out)))))
+              {:env {:DB_URL "postgres://global" :SECRET "global-secret"}
+               :tasks {:api {:run ["echo api"] :service true :env {:PORT "3000"}}
+                       :worker {:run ["echo worker"] :service true
+                                :env {:DB_URL "postgres://worker" :SECRET nil}}}})
+        yaml (:yaml out)]
+    (is (= #{:yaml} (set (keys out))))
+    (is (str/includes? yaml "api:"))
+    (is (str/includes? yaml "worker:"))
+    (is (str/includes? yaml "- DB_URL=postgres://global"))
+    (is (str/includes? yaml "- SECRET=global-secret"))
+    (is (str/includes? yaml "- PORT=3000"))
+    (is (str/includes? yaml "- DB_URL=postgres://worker"))
+    (is (not (str/includes? yaml "- SECRET=nil")))
+    (is (not (str/includes? yaml "worker:\n    command: env -u SECRET -- 'echo worker'\n    environment:\n    - DB_URL=postgres://worker\n    - SECRET=")))
+    (is (str/includes? yaml "env -u SECRET --"))
+    (is (not (str/includes? yaml "env -u SECRET -- 'echo api'")))
+    (is (str/includes? yaml "command: '''echo api'''"))
+    (is (str/includes? yaml "command: env -u SECRET -- sh -c ''\\''echo worker'\\'''"))))
 
 (deftest transpile-kebab-to-snake-on-service-fields
   (let [out (svc/transpile
@@ -60,8 +74,8 @@
   (let [out (svc/transpile
               {:tasks {:a {:run ["x"] :service true :env {:PORT "1"}}
                        :b {:run ["y"] :service true :env {:PORT "2"}}}})]
-    ;; sorted iteration: :a then :b; :b wins
-    (is (= "2" (-> out :env :PORT)))))
+    (is (str/includes? (:yaml out) "- PORT=1"))
+    (is (str/includes? (:yaml out) "- PORT=2"))))
 
 (deftest transpile-depends-on-preserves-service-name-keys
   (let [out (svc/transpile
@@ -96,6 +110,14 @@
   (is (thrown-with-msg? Exception #"service task :db must produce a command"
         (svc/transpile {:tasks {:db {:run (fn [_] nil) :service true}}}))))
 
+
+(deftest transpile-string-service-wraps-full-shell-command-for-unset
+  (let [out (svc/transpile {:env {:SECRET "secret"}
+                            :tasks {:db {:run "cd /tmp && echo \"$SECRET\""
+                                         :service true
+                                         :env {:SECRET nil}}}})
+        yaml (:yaml out)]
+    (is (str/includes? yaml "command: env -u SECRET -- sh -c 'cd /tmp && echo \"$SECRET\"'"))))
 (deftest up-pc-attach-execs-process-compose-foreground
   (let [tmp      (str (babashka.fs/create-temp-dir))
         sock     (str (babashka.fs/create-temp-dir) "/pc.sock")
