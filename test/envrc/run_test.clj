@@ -87,7 +87,6 @@
       (is (= {"FOO" "bar" "PORT" "9000" "URL" "http://127.0.0.1:9000"}
              (get-in @captured [:opts :extra-env]))))))
 
-
 (deftest execute-argv-uses-resolved-task-env
   (let [captured (atom nil)
         task {:run ["echo" "hi"]
@@ -142,8 +141,8 @@
            (run/editor-entry cfg :t :test (assoc task :run "npm test") {:root "."} :vscode)))
     (is (= {:label "t"
             :type "process"
-            :command "npm"
-            :args ["test"]
+            :command "env"
+            :args ["-u" "SECRET" "--" "npm" "test"]
             :options {:env expected-env}}
            (run/editor-entry cfg :t :test task {:root "."} :vscode)))
     (is (= {:label "t"

@@ -115,15 +115,15 @@
     (when result
       (case editor
         :vscode
-        (let [base {:label label :options {:env env}}]
+        (let [base {:label label :options {:env (merge set (zipmap unset (repeat nil)))}}]
           (if (string? result)
             (assoc base :type "shell" :command (wrap-unset-shell-command result unset))
             (assoc base :type "process"
-                        :command (first result)
-                        :args (vec (rest result)))))
+                        :command (first (wrap-unset-argv result unset))
+                        :args (vec (rest (wrap-unset-argv result unset))))))
 
         :zed
-        (let [base {:label label :env env}]
+        (let [base {:label label :env (merge set (zipmap unset (repeat nil))) }]
           (if (string? result)
             (assoc base :command (wrap-unset-shell-command result unset) :shell "system")
             (assoc base :command (first result)
