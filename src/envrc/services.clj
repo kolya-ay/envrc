@@ -31,7 +31,6 @@
     (map? m)    (into {} (map (fn [[k v]]
                                 (let [k' (transform-key k)
                                       v' (if (= k' :depends_on)
-                                           ;; preserve inner service-name keys verbatim
                                            v
                                            (transform-keys v))]
                                   [k' v']))) m)
@@ -60,14 +59,14 @@
       (seq set) (assoc :environment (env-map->list set)))))
 
 (defn transpile
-  "Pure: cfg -> {:yaml string}. Reads :service-flagged entries
+  "Pure: cfg -> yaml string. Reads :service-flagged entries
    from cfg's unified :tasks map."
   [cfg]
   (let [services (service-tasks cfg)
         processes (into (sorted-map)
                         (map (fn [[k v]] [k (service->pc-process cfg k v)]))
                         services)]
-    {:yaml (yaml/generate-string {:processes processes} {:dumper-options {:flow-style :block}})}))
+    (yaml/generate-string {:processes processes} {:dumper-options {:flow-style :block}})))
 
 (defn up-pc
   "Side-effecting: write YAML into state-dir, then launch process-compose.
@@ -78,7 +77,7 @@
   [cfg {:keys [state-dir sock-path extra-args attach?]}]
   (fs/create-dirs state-dir)
   (fs/create-dirs (fs/parent sock-path))
-  (let [{:keys [yaml]} (transpile cfg)
+  (let [yaml (transpile cfg)
         yaml-path (str state-dir "/process-compose.yml")
         marker    (str state-dir "/running")]
     (spit yaml-path yaml)
